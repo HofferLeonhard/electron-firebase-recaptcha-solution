@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>iframe Window</title>
+    <style>
+        body {
+            background-color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+
+	<div id="recaptcha-container"></div>
+
+
+  <script src="https://www.gstatic.com/firebasejs/4.8.1/firebase.js"></script>
+	<script type="text/javascript"> 
+		var iframeConfigs = {
+			container: "recaptcha-container",
+            init: function(){
+              var $this = this;
+             
+                $this.listening(function(msg){
+                  	if(msg.type == "json"){
+                      var content = JSON.parse(msg.content);
+                      if(content.title == "init-recaptcha"){
+                          $this.configs = content.configs;
+                          firebase.initializeApp($this.configs);
+                      }
+                      if(content.title == "recaptcha-tel"){
+                          $this.recaptchaTel(content.numTel, 
+                          	function(result){},
+                          	function(result){},
+                          	function(result){
+                          		$this.sending({title: result.type, msg: result.msg});
+                          	}
+                          );
+                      }
+                      if(content.title == "confirmate-recaptcha-tel"){
+                          $this.confirmateRecaptchaTel(content.code, 
+                          	function(result){},
+                          	function(result){},
+                          	function(result){
+                          		$this.sending({title: "confirmate-recaptcha-tel-results", msg: result});
+                          	}
+                          );
+                      }
+                  	}
+                });
+
+                $this.sending({title: "initialised"});
+            },
+            // addEventListener support for IE8
+            bindEvent: function(element, eventName, eventHandler) {
+                if (element.addEventListener){
+                    element.addEventListener(eventName, eventHandler, false);
+                } else if (element.attachEvent) {
+                    element.attachEvent('on' + eventName, eventHandler);
+                }
+            },
+            listening: function(recieve){
+              var $this = this;
+
+              // Listen to message from child window
+              $this.bindEvent(window, 'message', function (e) {
+                  recieve(e.data);
+              });
+            },
+            sending: function(msg){
+              var $this = this;
+
+              try{
+              	msg = {content:JSON.stringify(msg), type:"json"};
+              }
+              catch(e){
+              	msg = {content:msg, type:"text"};
+              }
+              	
+              window.parent.postMessage(msg, '*');
+            }, 
+            confirmateRecaptchaTel : function(code, startAction, loadingAction, finishAction){
+            	var $this = this;
+
+            	if($this.confirmationResult){
+            		$this.confirmationResult.confirm(code).then(function (result) { 
+						      finishAction({type: "confirmate-recaptcha-tel-success",msg:"success"});
+					      })
+					      .catch(function(error) {
+				            var state = {type:"confirmate-recaptcha-tel-error", msg:error};
+						        finishAction(state);
+				        });
+            	}
+            	else{
+            		var state = {type:"confirmate-recaptcha-tel-error", msg:error};
+					      finishAction(state);
+            	}
+            	
+            },
+            recaptchaTel : function(numTel, startAction, loadingAction, finishAction){
+            	var $this = this;
+
+            	window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier($this.container); 
+				      firebase.auth().signInWithPhoneNumber(numTel, window.recaptchaVerifier) 
+				      .then(function(confirmationResult) { 
+					        $this.confirmationResult = confirmationResult;
+					        $this.sending({title: "recaptcha-tel-result", confirmationResult:confirmationResult});
+				      })
+				      .catch(function(error) {
+			          state = {type:"recaptcha-tel-error", msg:error};
+					      finishAction(state);
+			        });
+            }
+        }
+
+        iframeConfigs.init();
+
+  </script>
+
+</body>
+</html>
